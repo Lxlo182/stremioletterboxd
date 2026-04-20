@@ -14,10 +14,9 @@ function sleep(ms) {
 
 function parseFilms($) {
   const films = [];
-  $("[data-film-id]").each((_, el) => {
+  $('[data-component-class="LazyPoster"]').each((_, el) => {
     const name = $(el).attr("data-item-name") || "";
     const slug = $(el).attr("data-item-slug");
-    const filmId = $(el).attr("data-film-id");
 
     if (!slug) return;
 
@@ -25,11 +24,21 @@ function parseFilms($) {
     const year = yearMatch ? yearMatch[1] : null;
     const title = name.replace(/\s*\(\d{4}\)$/, "").trim() || slug;
 
-    const idStr = filmId || "";
-    const idPath = idStr.split("").join("/");
-    const poster = filmId
-      ? `https://a.ltrbxd.com/resized/film-poster/${idPath}/${filmId}-${slug}-0-230-0-345-crop.jpg`
-      : null;
+    // data-postered-identifier contains JSON like {"uid":"film:818798",...}
+    let filmId = null;
+    try {
+      const identifier = JSON.parse(
+        $(el).attr("data-postered-identifier") || "{}"
+      );
+      const uid = identifier.uid || "";
+      filmId = uid.startsWith("film:") ? uid.split(":")[1] : null;
+    } catch (e) {}
+
+    const idPath = filmId ? filmId.split("").join("/") : null;
+    const poster =
+      filmId && idPath
+        ? `https://a.ltrbxd.com/resized/film-poster/${idPath}/${filmId}-${slug}-0-230-0-345-crop.jpg`
+        : null;
 
     films.push({ title, year, slug, poster });
   });
