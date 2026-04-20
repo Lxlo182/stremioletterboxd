@@ -2,8 +2,6 @@ const { addonBuilder } = require("stremio-addon-sdk");
 const fetch = require("node-fetch");
 const { fetchPage } = require("./scraper");
 
-// For quick local testing, uncomment and set your username here:
-const TEST_USERNAME = "eduardoizag";
 
 const FILMS_PER_PAGE = 28;
 
@@ -25,6 +23,7 @@ const manifest = {
   idPrefixes: ["tt"],
   behaviorHints: {
     configurable: true,
+    configurationRequired: true,
   },
   config: [
     {
@@ -78,7 +77,7 @@ async function lookupMeta(title, year) {
 builder.defineCatalogHandler(async (args) => {
   if (args.id !== "letterboxd-watchlist") return { metas: [] };
 
-  const username = TEST_USERNAME || args.config?.username;
+  const username = args.config?.username;
   if (!username) return { metas: [] };
 
   const skip = parseInt(args.extra?.skip || 0);
@@ -102,5 +101,4 @@ builder.defineCatalogHandler(async (args) => {
 });
 
 module.exports = builder.getInterface();
-module.exports.TEST_USERNAME = TEST_USERNAME;
 module.exports.baseManifest = manifest;
