@@ -3,7 +3,7 @@ const landingTemplate = require("stremio-addon-sdk/src/landingTemplate");
 const express = require("express");
 
 const addonInterface = require("./addon");
-const { TEST_USERNAME, baseManifest } = require("./addon");
+const { baseManifest } = require("./addon");
 
 const app = express();
 
@@ -13,7 +13,7 @@ app.use((req, res, next) => {
 
   // URL pattern: /{base64_config}/manifest.json or /manifest.json
   const parts = req.path.split("/").filter(Boolean);
-  let username = TEST_USERNAME || "Letterboxd";
+  let username = "Letterboxd";
 
   if (parts.length === 2) {
     try {
