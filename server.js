@@ -1,9 +1,11 @@
+require("dotenv/config");
 const { getRouter } = require("stremio-addon-sdk");
 const landingTemplate = require("stremio-addon-sdk/src/landingTemplate");
 const express = require("express");
 
 const addonInterface = require("./addon");
 const { baseManifest } = require("./addon");
+const { initDb } = require("./db");
 
 const app = express();
 
@@ -47,6 +49,15 @@ app.get("/configure", (_, res) => {
 
 app.use(getRouter(addonInterface));
 
-app.listen(8080, () => {
-  console.log("Letterboxd addon running on http://127.0.0.1:8080/manifest.json");
-});
+const PORT = process.env.PORT || 8080;
+
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Letterboxd addon running on http://127.0.0.1:${PORT}/manifest.json`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize database:", err.message);
+    process.exit(1);
+  });
