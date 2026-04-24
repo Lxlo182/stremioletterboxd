@@ -159,9 +159,10 @@ builder.defineCatalogHandler(async (args) => {
 
   await syncWatchlist(username);
 
+  const skip = parseInt(args.extra?.skip || 0);
   const result = await pool.query(
-    "SELECT slug, title, year, poster FROM watchlist_films WHERE username = $1 ORDER BY position",
-    [username]
+    "SELECT slug, title, year, poster FROM watchlist_films WHERE username = $1 ORDER BY position LIMIT $2 OFFSET $3",
+    [username, FILMS_PER_PAGE, skip]
   );
 
   const metas = [];
