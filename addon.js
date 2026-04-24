@@ -1,10 +1,13 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const fetch = require("node-fetch");
-const { fetchAllWatchlist } = require("./scraper");
+const { fetchPage } = require("./scraper");
 const { pool } = require("./db");
 
 const FILMS_PER_PAGE = 28;
 const WATCHLIST_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Track in-progress background syncs so we don't launch duplicates
+const syncInProgress = new Set();
 
 const manifest = {
   id: "com.stremioletterboxd",
@@ -85,43 +88,66 @@ async function lookupMeta(title, year) {
   return null;
 }
 
+async function storeFilms(client, username, films, startPosition) {
+  for (let i = 0; i < films.length; i++) {
+    const film = films[i];
+    await client.query(
+      `INSERT INTO watchlist_films (username, slug, title, year, poster, position, synced_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (username, slug) DO UPDATE SET position = $6, synced_at = NOW()`,
+      [username, film.slug, film.title, film.year || null, film.poster || null, startPosition + i]
+    );
+  }
+}
+
+function fetchRemainingPages(username, totalPages) {
+  if (syncInProgress.has(username)) return;
+  syncInProgress.add(username);
+
+  (async () => {
+    try {
+      for (let page = 2; page <= totalPages; page++) {
+        const { films } = await fetchPage(username, page);
+        if (films.length === 0) break;
+
+        const offset = (page - 1) * FILMS_PER_PAGE;
+        await storeFilms(pool, username, films, offset);
+        console.log(`Background: page ${page}/${totalPages} — ${films.length} films for ${username}`);
+      }
+      console.log(`Background sync complete for ${username}`);
+    } catch (err) {
+      console.error(`Background sync failed for ${username}:`, err.message);
+    } finally {
+      syncInProgress.delete(username);
+    }
+  })();
+}
+
 async function syncWatchlist(username) {
-  // Check if sync is needed
-  const existing = await pool.query(
-    "SELECT synced_at FROM watchlist_films WHERE username = $1 LIMIT 1",
+  // Check if we have fresh data
+  const freshCheck = await pool.query(
+    "SELECT synced_at FROM watchlist_films WHERE username = $1 ORDER BY position LIMIT 1",
     [username]
   );
 
-  if (existing.rows.length > 0) {
-    const age = Date.now() - new Date(existing.rows[0].synced_at).getTime();
+  if (freshCheck.rows.length > 0) {
+    const age = Date.now() - new Date(freshCheck.rows[0].synced_at).getTime();
     if (age < WATCHLIST_TTL_MS) return; // still fresh
+
+    // TTL expired — wipe and re-fetch
+    await pool.query("DELETE FROM watchlist_films WHERE username = $1", [username]);
   }
 
-  // Scrape the full watchlist
-  const films = await fetchAllWatchlist(username);
+  // Fetch page 1 synchronously
+  const { films, totalPages } = await fetchPage(username, 1);
   if (films.length === 0) return;
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("DELETE FROM watchlist_films WHERE username = $1", [username]);
+  await storeFilms(pool, username, films, 0);
+  console.log(`Page 1/${totalPages} — ${films.length} films for ${username}`);
 
-    for (let i = 0; i < films.length; i++) {
-      const film = films[i];
-      await client.query(
-        `INSERT INTO watchlist_films (username, slug, title, year, poster, position, synced_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [username, film.slug, film.title, film.year || null, film.poster || null, i]
-      );
-    }
-
-    await client.query("COMMIT");
-    console.log(`Synced ${films.length} films for ${username}`);
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error(`Sync failed for ${username}:`, err.message);
-  } finally {
-    client.release();
+  // Fetch remaining pages in background
+  if (totalPages > 1) {
+    fetchRemainingPages(username, totalPages);
   }
 }
 
@@ -133,10 +159,9 @@ builder.defineCatalogHandler(async (args) => {
 
   await syncWatchlist(username);
 
-  const skip = parseInt(args.extra?.skip || 0);
   const result = await pool.query(
-    "SELECT slug, title, year, poster FROM watchlist_films WHERE username = $1 ORDER BY position LIMIT $2 OFFSET $3",
-    [username, FILMS_PER_PAGE, skip]
+    "SELECT slug, title, year, poster FROM watchlist_films WHERE username = $1 ORDER BY position",
+    [username]
   );
 
   const metas = [];
