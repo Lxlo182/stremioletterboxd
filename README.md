@@ -63,7 +63,7 @@ Paste `http://localhost:8080/manifest.json` into Stremio's addon search bar.
 3. Connect the repo -- Render detects `render.yaml` and creates:
    - A free web service
    - A free Postgres database with `DATABASE_URL` wired automatically
-4. Once deployed, install in Stremio using `https://stremio-letterboxd-g2db.onrender.com/manifest.json`
+4. Once deployed, install in Stremio using `https://<your-service>.onrender.com/manifest.json`
 
 ### Tech stack
 
