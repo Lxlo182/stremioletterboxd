@@ -9,31 +9,18 @@ const { initDb } = require("./db");
 
 const app = express();
 
-// Intercept manifest requests to inject dynamic catalog name
+// Intercept manifest requests to remove configurable hint once config is present
 app.use((req, res, next) => {
   if (!req.path.endsWith("/manifest.json")) return next();
 
-  // URL pattern: /{base64_config}/manifest.json or /manifest.json
   const parts = req.path.split("/").filter(Boolean);
-  let username = "Letterboxd";
-
-  if (parts.length === 2) {
-    try {
-      const config = JSON.parse(Buffer.from(parts[0], "base64").toString());
-      if (config.username) username = config.username;
-    } catch (e) {}
-  }
-
   const hasConfig = parts.length === 2;
+
   const manifest = {
     ...baseManifest,
     behaviorHints: hasConfig
       ? {} // remove configurable once a config is present, so Stremio accepts the install
       : { ...baseManifest.behaviorHints },
-    catalogs: baseManifest.catalogs.map((cat) => ({
-      ...cat,
-      name: `${username} LB Watchlist`,
-    })),
   };
 
   res.setHeader("Access-Control-Allow-Origin", "*");
